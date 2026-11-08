@@ -15,14 +15,27 @@ bp = Blueprint("blog", __name__)
 
 @bp.route("/")
 def index():
-    """Show all the posts, most recent first."""
+    """Show posts, optionally filtered by a literal ASCII-insensitive substring."""
+    q = request.args.get("q", "").strip()
     db = get_db()
-    posts = db.execute(
+    sql = (
         "SELECT p.id, title, body, created, author_id, username"
         " FROM post p JOIN user u ON p.author_id = u.id"
-        " ORDER BY created DESC"
-    ).fetchall()
-    return render_template("blog/index.html", posts=posts)
+    )
+    parameters = ()
+
+    if q:
+        # instr treats %, _, quotes, and backslashes literally. SQLite lower()
+        # handles ASCII case, not full Unicode case folding.
+        sql += (
+            " WHERE instr(lower(p.title), lower(?)) > 0"
+            " OR instr(lower(p.body), lower(?)) > 0"
+        )
+        parameters = (q, q)
+
+    sql += " ORDER BY p.created DESC, p.id DESC"
+    posts = db.execute(sql, parameters).fetchall()
+    return render_template("blog/index.html", posts=posts, q=q)
 
 
 def get_post(id, check_author=True):
